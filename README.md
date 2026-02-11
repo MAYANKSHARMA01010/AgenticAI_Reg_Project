@@ -5,9 +5,10 @@ A simple, beginner-friendly Agentic AI project that combines Retrieval Augmented
 ## Project Overview
 
 This is a single-file Streamlit application that demonstrates:
+
 - **RAG (Retrieval Augmented Generation)**: Upload a PDF, extract text, create embeddings, and retrieve relevant chunks
 - **Web Search**: Live Google search using Serper API
-- **LLM Integration**: Combine document + web context and send to OpenAI for intelligent answers
+- **LLM Integration**: Combine document + web context and send to **Google Gemini** for intelligent answers
 
 ## Architecture
 
@@ -22,25 +23,30 @@ Query Processing:
 ├─ Retrieve relevant chunks from FAISS
 ├─ Perform web search via Serper API
 ├─ Combine contexts
-└─ Send to OpenAI ChatCompletion
+└─ Send to Google Gemini (gemini-2.0-flash / gemini-1.5-flash)
     ↓
 Display Answer + Sources in Streamlit
 ```
 
 ## Setup
 
-### 1. Install Dependencies
+### 1. Create Virtual Environment & Install Dependencies
+
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
 pip install -r requirements.txt
 ```
 
 ### 2. Set Up Environment Variables
+
 - Copy `.env.example` to `.env`
 - Add your API keys:
-  - `OPENAI_API_KEY`: Get from https://platform.openai.com/api-keys
+  - `GEMINI_API_KEY`: Get from https://aistudio.google.com/app/apikey
   - `SERPER_API_KEY`: Get from https://serper.dev
 
 ### 3. Run the App
+
 ```bash
 streamlit run app.py
 ```
@@ -59,7 +65,7 @@ The app will open in your browser at `http://localhost:8501`
 4. **Get Answer**: Click "Search & Generate Answer" to:
    - Search FAISS for top 3 relevant document chunks
    - Perform live web search via Serper API
-   - Send combined context to OpenAI ChatCompletion
+   - Send combined context to Google Gemini
    - Display comprehensive answer citing sources
 
 ## Code Structure
@@ -67,21 +73,24 @@ The app will open in your browser at `http://localhost:8501`
 ### Key Functions (all in `app.py`):
 
 **PDF & Text Processing:**
+
 - `extract_text_from_pdf()` - Extract text from uploaded PDF file
 - `chunk_text()` - Split text into overlapping chunks for RAG
 
 **Embeddings & Vector Search:**
+
 - `create_faiss_index()` - Build FAISS index from embeddings
 - `search_faiss_index()` - Retrieve top-k most relevant chunks from FAISS
 
 **Web Search & LLM:**
+
 - `search_web()` - Perform Google search using Serper API
-- `generate_answer()` - Call OpenAI with combined document + web context
+- `generate_answer()` - Call Gemini with combined document + web context
 
 ## Technologies Used
 
 - **Streamlit**: Web UI framework
-- **OpenAI**: LLM (gpt-3.5-turbo)
+- **Google Gemini**: LLM (gemini-2.0-flash / gemini-1.5-flash)
 - **sentence-transformers**: Embedding model (all-MiniLM-L6-v2)
 - **FAISS**: Vector database for similarity search
 - **Serper API**: Google Search API
@@ -102,13 +111,13 @@ The app will open in your browser at `http://localhost:8501`
 - FAISS index is stored in Streamlit session state (resets on page reload)
 - Keep PDF documents under 50 pages for fast processing
 - Web search requires active Serper API account
-- Model used: gpt-3.5-turbo (set in `call_openai()` function)
+- Model used: gemini-2.0-flash (prioritized in `generate_answer()` function)
 
 ## Common Issues
 
 **"API key not found"**: Check your `.env` file has the correct API keys
 
-**"Module not found"**: Make sure all packages from `requirements.txt` are installed
+**"Module not found"**: Make sure you have activated the virtual environment and installed all packages from `requirements.txt`
 
 **"Slow PDF processing"**: Large PDFs (100+ pages) may take time. Sentence-transformers will download the model on first run (~50MB)
 
