@@ -10,7 +10,20 @@ import numpy as np
 
 load_dotenv()
 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+
+try:
+    import google.genai as genai
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    GEMINI_CLIENT_TYPE = "genai"
+except Exception as e:
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        GEMINI_CLIENT_TYPE = "generativeai"
+    except Exception as e2:
+        GEMINI_CLIENT_TYPE = None
 
 @st.cache_resource
 def load_embedding_model():
@@ -70,17 +83,44 @@ def search_web(query: str, num_results: int = 5) -> List[dict]:
         results = response.json()
         return results.get("organic", [])
     except Exception as e:
-        st.error(f"Web search error: {str(e)}")
         return []
 
+def generate_answer(question: str, rag_context: str, web_context: str) -> str:
+    if not GEMINI_CLIENT_TYPE or not GEMINI_API_KEY:
+        return "⚠️ Gemini API key missing or invalid. Please add `GEMINI_API_KEY` to your `.env` file to enable AI answers."
+    
+    combined_context = f"""
+System: You are a helpful AI assistant. Answer the user question using the provided document context and web search results.
+Cite whether information comes from the 'Document' or the 'Web'.
+
+Document Context:
+{rag_context}
+
+Web Search Results:
+{web_context}
+
+User Question:
+{question}
+"""
+    try:
+        if GEMINI_CLIENT_TYPE == "genai":
+            response = client.models.generate_content(model="gemini-2.0-flash", contents=combined_context)
+            return response.text
+        else:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(combined_context)
+            return response.text
+    except Exception as e:
+        return f"Error generating answer: {str(e)}"
+
 st.set_page_config(
-    page_title="Serper Search & Retrieval Agent",
+    page_title="RAG + Web Search Agent",
     page_icon="🔍",
     layout="wide"
 )
 
-st.title("🔍 Serper Search & Retrieval Agent")
-st.markdown("Upload a PDF document and ask questions. The agent retrieves relevant chunks from your document and performs a live web search using Serper API.")
+st.title("🔍 RAG + Web Search Agent")
+st.markdown("Upload a PDF document and ask questions. The agent combines document knowledge with live web search using Gemini API.")
 
 if "faiss_index" not in st.session_state:
     st.session_state.faiss_index = None
@@ -106,54 +146,46 @@ with st.sidebar:
                 st.session_state.faiss_index = faiss_index
                 st.session_state.chunks = text_chunks
                 st.session_state.pdf_uploaded = True
-                st.success(f"✅ PDF processed! Created {len(text_chunks)} chunks.")
+                st.success(f"✅ PDF processed!")
     if st.session_state.pdf_uploaded:
-        st.success("✅ Document loaded and ready for retrieval")
+        st.success("✅ Document loaded and ready")
 
-st.header("❓ Search & Retrieve")
+st.header("❓ Ask a Question")
 
-user_query = st.text_input(
-    "Enter your search query:",
-    placeholder="What are the key findings in this document?",
-    help="Search within your document and across the web"
-)
+user_query = st.text_input("Enter your question:", placeholder="What does the document say about...?")
 
-if st.button("Retrieve Information", use_container_width=True):
+if st.button("Generate Answer", use_container_width=True):
     if user_query.strip():
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📚 Document Retrieval (RAG)")
+        with st.spinner("🔄 Searching & Generating..."):
+            relevant_chunks = []
             if st.session_state.pdf_uploaded:
-                with st.spinner("Searching document..."):
-                    relevant_chunks = search_faiss_index(
-                        user_query,
-                        st.session_state.faiss_index,
-                        st.session_state.chunks,
-                        k=3
-                    )
-                    for i, chunk in enumerate(relevant_chunks, 1):
-                        st.info(f"**Chunk {i}:**\n\n{chunk}")
-            else:
-                st.warning("Please upload a PDF for document retrieval.")
-        
-        with col2:
-            st.subheader("🌐 Web Search Results (Serper)")
-            with st.spinner("Searching web..."):
-                web_results = search_web(user_query, num_results=5)
-                if web_results:
-                    for i, result in enumerate(web_results, 1):
-                        with st.expander(f"{i}. {result.get('title', 'No Title')}"):
-                            st.write(f"**Snippet:** {result.get('snippet', 'No snippet available')}")
-                            st.write(f"**URL:** [{result.get('link')}]({result.get('link')})")
-                else:
-                    st.write("No web results found.")
+                relevant_chunks = search_faiss_index(user_query, st.session_state.faiss_index, st.session_state.chunks)
+            
+            web_results = search_web(user_query)
+            
+            rag_context = "\n---\n".join(relevant_chunks)
+            web_context_str = "\n".join([f"- {r.get('title')}: {r.get('snippet')}" for r in web_results])
+            
+            answer = generate_answer(user_query, rag_context, web_context_str)
+            
+            st.subheader("📋 AI Answer")
+            st.write(answer)
+            
+            with st.expander("📚 View Sources"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**Document Chunks:**")
+                    for c in relevant_chunks: st.info(c)
+                with col2:
+                    st.markdown("**Web Results:**")
+                    for r in web_results: st.write(f"- [{r.get('title')}]({r.get('link')})")
     else:
-        st.warning("Please enter a query.")
+        st.warning("Please enter a question.")
 
 st.divider()
 st.markdown("""
-**How this agent works:**
-1. **Document Retrieval**: Finds the most relevant parts of your uploaded PDF using FAISS.
-2. **Web Search**: Provides real-time information using the Serper Google Search API.
+**How it works:**
+1. **RAG**: Finds relevant parts of your PDF.
+2. **Search**: Gets live web data via Serper.
+3. **AI**: Gemini synthesizes both into a final answer.
 """)

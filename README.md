@@ -1,14 +1,14 @@
-# Serper Search & Retrieval Agent
+# RAG + Web Search Agent
 
-A simple, beginner-friendly tool that combines Document Retrieval (FAISS) with live web search (Serper).
+A powerful tool that combines Document Retrieval (FAISS), live web search (Serper), and AI answer generation (Gemini).
 
 ## Project Overview
 
 This is a single-file Streamlit application that demonstrates:
 
-- **Document Retrieval (RAG)**: Upload a PDF, extract text, create embeddings, and retrieve relevant chunks using FAISS.
+- **RAG (Retrieval Augmented Generation)**: Upload a PDF and retrieve relevant chunks using FAISS.
 - **Web Search**: Live Google search results using the Serper API.
-- **Pure Retrieval**: No LLM required – view raw context from your files and the web side-by-side.
+- **AI Answering**: Uses Google Gemini to synthesize document context and web search results into a single comprehensive answer.
 
 ## Architecture
 
@@ -21,9 +21,10 @@ User Input (PDF + Query)
     ↓
 Query Processing:
 ├─ [Local] Retrieve relevant chunks from FAISS
-└─ [Web] Perform web search via Serper API
+├─ [Web] Perform web search via Serper API
+└─ [AI] Generate Answer using Google Gemini
     ↓
-Display Results in Streamlit (Side-by-Side)
+Display Synthesis in Streamlit
 ```
 
 ## Setup
@@ -39,7 +40,8 @@ pip install -r requirements.txt
 ### 2. Set Up Environment Variables
 
 - Copy `.env.example` to `.env`
-- Add your Serper API key:
+- Add your API keys:
+  - `GEMINI_API_KEY`: Get from https://aistudio.google.com/app/apikey
   - `SERPER_API_KEY`: Get from https://serper.dev
 
 ### 3. Run the App
@@ -52,18 +54,10 @@ The app will open in your browser at `http://localhost:8501`
 
 ## How to Use
 
-1. **Upload PDF**: Use the sidebar file uploader to select a PDF document.
-2. **Process PDF**: Click "Process PDF" to build the retrieval index.
-3. **Search**: Enter a query to search both your document and the live web.
-4. **View Results**: Compare document knowledge with live web data in the side-by-side view.
-
-## Technologies Used
-
-- **Streamlit**: Web UI framework
-- **Serper API**: Google Search API
-- **sentence-transformers**: Embedding model (all-MiniLM-L6-v2)
-- **FAISS**: Vector database for similarity search
-- **PyPDF2**: PDF text extraction
+1. **Upload PDF**: Select a PDF document in the sidebar.
+2. **Process PDF**: Click "Process PDF" to build the index.
+3. **Ask**: Enter a question and click "Generate Answer".
+4. **View**: Read the AI's synthesized response and check sources if needed.
 
 ---
 
