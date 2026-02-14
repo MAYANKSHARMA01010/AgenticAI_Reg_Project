@@ -19,6 +19,8 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 try:
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -37,6 +39,16 @@ try:
     from huggingface_hub import InferenceClient
 except ImportError:
     InferenceClient = None
+
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
+
+try:
+    import cohere
+except ImportError:
+    cohere = None
 
 
 
@@ -143,8 +155,31 @@ Answer:"""
 
     try:
         if model_type == "gemini" and genai:
-            model = genai.GenerativeModel('gemini-pro')
+            # Trying older stable model
+            model = genai.GenerativeModel('gemini-1.0-pro')
             response = model.generate_content(prompt)
+            return response.text
+        
+        elif model_type == "groq" and Groq and GROQ_API_KEY:
+            client = Groq(api_key=GROQ_API_KEY)
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that synthesizes information from multiple sources."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1024
+            )
+            return response.choices[0].message.content
+        
+        elif model_type == "cohere" and cohere and COHERE_API_KEY:
+            co = cohere.Client(COHERE_API_KEY)
+            response = co.chat(
+                message=prompt,
+                model="command-r-08-2024",
+                temperature=0.7
+            )
             return response.text
         
         elif model_type == "grok" and OpenAI and GROK_API_KEY:
@@ -266,10 +301,14 @@ with st.sidebar:
     st.header("🤖 AI Model Selection")
     
     available_models = {}
+    if Groq and GROQ_API_KEY:
+        available_models["groq"] = "⚡ Groq (Fastest & Free)"
+    if cohere and COHERE_API_KEY:
+        available_models["cohere"] = "Cohere (Free Tier)"
     if genai and GEMINI_API_KEY:
-        available_models["gemini"] = "Google Gemini (Recommended)"
+        available_models["gemini"] = "Google Gemini"
     if OpenAI and GROK_API_KEY:
-        available_models["grok"] = "Grok (xAI)"
+        available_models["grok"] = "Grok (xAI - Paid)"
     if InferenceClient and HUGGINGFACE_API_KEY:
         available_models["huggingface"] = "Hugging Face"
     

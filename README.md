@@ -6,10 +6,12 @@ A powerful tool that combines Document Retrieval (FAISS), live web search (Serpe
 
 - **📄 RAG (Retrieval Augmented Generation)**: Upload PDFs and retrieve relevant chunks using FAISS vector search
 - **🌐 Web Search**: Get real-time information from Google via Serper API
-- **🤖 AI Answer Generation**: Synthesize information using your choice of:
-  - **Google Gemini** (Recommended - Fast, free tier available)
-  - **Grok (xAI)** (Alternative if you have API access)
-  - **Hugging Face** (Open-source models)
+- **🤖 AI Answer Generation**: Synthesize information using your choice of **5 FREE AI models**:
+  - **⚡ Groq** (Fastest - Free, uses Llama 3.3 70B)
+  - **Google Gemini** (Fast, free tier available)
+  - **Cohere** (Good quality, free tier)
+  - **Hugging Face** (Open-source Mixtral model, free)
+  - **Grok (xAI)** (Premium option - Paid)
 - **💡 Smart Synthesis**: AI combines document context and web results into comprehensive answers
 
 ## Architecture
