@@ -11,12 +11,35 @@ import numpy as np
 import logging
 import warnings
 
-# Suppress warnings and logs
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 load_dotenv()
 
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROK_API_KEY = os.getenv("GROK_API_KEY")
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+
+try:
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    import google.generativeai as genai
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+except ImportError:
+    genai = None
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
+try:
+    from huggingface_hub import InferenceClient
+except ImportError:
+    InferenceClient = None
+
+
+
 
 @st.cache_resource
 def load_embedding_model():
@@ -80,6 +103,80 @@ def search_web(query: str, num_results: int = 5) -> List[dict]:
         return results.get("organic", [])
     except Exception as e:
         return []
+
+def generate_answer(query: str, rag_chunks: List[str], web_results: List[dict], model_type: str = "gemini") -> str:
+    """
+    Generate a comprehensive answer using RAG chunks and web search results.
+    Supports: gemini, grok, huggingface
+    """
+    context = ""
+    
+    if rag_chunks:
+        context += "**Document Information:**\n"
+        for i, chunk in enumerate(rag_chunks, 1):
+            context += f"\n[Doc {i}] {chunk[:300]}...\n"
+    
+    if web_results:
+        context += "\n**Web Search Results:**\n"
+        for i, res in enumerate(web_results, 1):
+            title = res.get('title', 'No Title')
+            snippet = res.get('snippet', '')
+            context += f"\n[Web {i}] {title}: {snippet}\n"
+    
+    if not context:
+        return "I couldn't find any relevant information to answer your question."
+    
+    prompt = f"""Based on the following context, provide a comprehensive and accurate answer to the user's question.
+
+Context:
+{context}
+
+User Question: {query}
+
+Instructions:
+- Synthesize information from both document chunks and web results
+- Provide a clear, well-structured answer
+- Cite sources when relevant (e.g., "According to the document..." or "Web sources indicate...")
+- If information is insufficient, acknowledge limitations
+
+Answer:"""
+
+    try:
+        if model_type == "gemini" and genai:
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(prompt)
+            return response.text
+        
+        elif model_type == "grok" and OpenAI and GROK_API_KEY:
+            client = OpenAI(
+                api_key=GROK_API_KEY,
+                base_url="https://api.x.ai/v1"
+            )
+            response = client.chat.completions.create(
+                model="grok-beta",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that synthesizes information from multiple sources."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+        
+        elif model_type == "huggingface" and InferenceClient and HUGGINGFACE_API_KEY:
+            client = InferenceClient(token=HUGGINGFACE_API_KEY)
+            response = client.text_generation(
+                prompt,
+                model="mistralai/Mixtral-8x7B-Instruct-v0.1",
+                max_new_tokens=500,
+                temperature=0.7
+            )
+            return response
+        
+        else:
+            return f"❌ {model_type.upper()} is not available. Please check your API key and library installation."
+    
+    except Exception as e:
+        return f"❌ Error generating answer with {model_type}: {str(e)}"
 
 def format_results(rag_chunks: List[str], web_results: List[dict]) -> str:
     output = ""
@@ -164,17 +261,40 @@ with st.sidebar:
 
     if st.session_state.pdf_uploaded:
         st.success("✅ Document loaded and ready")
+    
+    st.divider()
+    st.header("🤖 AI Model Selection")
+    
+    available_models = {}
+    if genai and GEMINI_API_KEY:
+        available_models["gemini"] = "Google Gemini (Recommended)"
+    if OpenAI and GROK_API_KEY:
+        available_models["grok"] = "Grok (xAI)"
+    if InferenceClient and HUGGINGFACE_API_KEY:
+        available_models["huggingface"] = "Hugging Face"
+    
+    if not available_models:
+        st.error("⚠️ No AI models configured. Please add API keys to your .env file.")
+        selected_model = None
+    else:
+        selected_model = st.selectbox(
+            "Choose AI Model:",
+            options=list(available_models.keys()),
+            format_func=lambda x: available_models[x],
+            help="Select which AI model to use for generating answers"
+        )
 
 st.header("❓ Search")
 
 user_query = st.text_input("Enter your query:", placeholder="Type clear keywords...")
 
-if st.button("Search", use_container_width=True):
-    if user_query.strip():
-        with st.spinner("🔄 Searching..."):
+if st.button("Generate Answer", use_container_width=True, type="primary"):
+    if not selected_model:
+        st.error("❌ No AI model available. Please configure API keys in .env file.")
+    elif user_query.strip():
+        with st.spinner(f"🔄 Generating answer using {available_models.get(selected_model, selected_model)}..."):
             relevant_chunks = []
             
-            # Warn if file uploaded but not processed
             if uploaded_file is not None and not st.session_state.pdf_uploaded:
                 st.warning("⚠️ You uploaded a file but didn't click 'Process PDF'. Searching web only.")
             
@@ -183,17 +303,24 @@ if st.button("Search", use_container_width=True):
             
             web_results = search_web(user_query)
             
-            formatted_output = format_results(relevant_chunks, web_results)
+            answer = generate_answer(user_query, relevant_chunks, web_results, selected_model)
             
-            st.subheader("📋 Search Results")
-            st.markdown(formatted_output)
+            st.subheader("💡 AI-Generated Answer")
+            st.markdown(answer)
+            
+            with st.expander("📊 View Sources"):
+                formatted_output = format_results(relevant_chunks, web_results)
+                st.markdown(formatted_output)
             
     else:
         st.warning("Please enter a query.")
 
+
 st.divider()
 st.markdown("""
 **How it works:**
-1. **RAG**: Retrieves relevant sections from your PDF.
-2. **Web Search**: Gets top results from Serper.
+1. **RAG**: Retrieves relevant sections from your PDF using FAISS vector search.
+2. **Web Search**: Gets top results from Serper API for real-time information.
+3. **AI Synthesis**: Combines both sources to generate a comprehensive answer using your selected AI model.
 """)
+
