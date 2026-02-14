@@ -4,7 +4,8 @@ A powerful tool that combines Document Retrieval (FAISS), live web search (Serpe
 
 ## Features
 
-- **📄 RAG (Retrieval Augmented Generation)**: Upload PDFs and retrieve relevant chunks using FAISS vector search
+- **📄 RAG (Retrieval Augmented Generation)**: Upload documents and retrieve relevant chunks using FAISS vector search
+  - **Supported Formats**: PDF, TXT, DOCX, CSV, Excel, JSON
 - **🌐 Web Search**: Get real-time information from Google via Serper API
 - **🤖 AI Answer Generation**: Synthesize information using your choice of **5 FREE AI models**:
   - **⚡ Groq** (Fastest - Free, uses Llama 3.3 70B)

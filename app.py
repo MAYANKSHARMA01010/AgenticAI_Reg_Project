@@ -7,7 +7,9 @@ from PyPDF2 import PdfReader
 from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
-
+import docx
+import pandas as pd
+import json
 import logging
 import warnings
 
@@ -59,13 +61,42 @@ def load_embedding_model():
 
 embedding_model = load_embedding_model()
 
-def extract_text_from_pdf(pdf_file) -> str:
-    pdf_reader = PdfReader(pdf_file)
+def extract_text_from_file(uploaded_file) -> str:
+    """Extract text from various file formats."""
+    file_type = uploaded_file.name.split('.')[-1].lower()
     text = ""
-    for page_num in range(len(pdf_reader.pages)):
-        page = pdf_reader.pages[page_num]
-        if page.extract_text():
-            text += page.extract_text()
+    
+    try:
+        if file_type == 'pdf':
+            pdf_reader = PdfReader(uploaded_file)
+            for page in pdf_reader.pages:
+                if page.extract_text():
+                    text += page.extract_text() + "\n"
+                    
+        elif file_type == 'docx':
+            doc = docx.Document(uploaded_file)
+            for para in doc.paragraphs:
+                text += para.text + "\n"
+                
+        elif file_type == 'txt':
+            text = uploaded_file.read().decode("utf-8")
+            
+        elif file_type in ['csv', 'xlsx', 'xls']:
+            if file_type == 'csv':
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            # Convert dataframe to text representation
+            text = df.to_string(index=False)
+            
+        elif file_type == 'json':
+            data = json.load(uploaded_file)
+            text = json.dumps(data, indent=2)
+            
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
+        return None
+        
     return text if text.strip() else None
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
@@ -244,7 +275,7 @@ st.set_page_config(
 )
 
 st.title("🔍 RAG + Web Search Tool")
-st.markdown("Upload a PDF document and search for information. This tool retrieves relevant sections from your PDF and performs a live web search.")
+st.markdown("Upload a document (PDF, TXT, DOCX, CSV, Excel, JSON) and search for information. This tool retrieves relevant sections from your file and performs a live web search.")
 
 if "faiss_index" not in st.session_state:
     st.session_state.faiss_index = None
@@ -258,9 +289,9 @@ if "processed_file_name" not in st.session_state:
 with st.sidebar:
     st.header("📄 Document Management")
     uploaded_file = st.file_uploader(
-        "Upload a PDF document",
-        type=["pdf"],
-        help="This will be your RAG knowledge base"
+        "Upload a document",
+        type=["pdf", "txt", "docx", "csv", "xlsx", "json"],
+        help="Upload PDF, Text, Word, Excel, CSV, or JSON files"
     )
     
     # Reset state if a new file is uploaded
@@ -271,21 +302,21 @@ with st.sidebar:
         st.session_state.processed_file_name = None
     
     if uploaded_file is not None:
-        if st.button("Process PDF", use_container_width=True):
-            with st.spinner("Processing PDF..."):
-                pdf_text = extract_text_from_pdf(uploaded_file)
+        if st.button("Process Document", use_container_width=True):
+            with st.spinner("Processing document..."):
+                file_text = extract_text_from_file(uploaded_file)
                 
-                if pdf_text:
-                    text_chunks = chunk_text(pdf_text)
+                if file_text:
+                    text_chunks = chunk_text(file_text)
                     embeddings = embedding_model.encode(text_chunks, convert_to_tensor=False)
                     faiss_index = create_faiss_index(text_chunks, embeddings)
                     st.session_state.faiss_index = faiss_index
                     st.session_state.chunks = text_chunks
                     st.session_state.pdf_uploaded = True
                     st.session_state.processed_file_name = uploaded_file.name
-                    st.success(f"✅ PDF processed!")
+                    st.success(f"✅ Document processed!")
                 else:
-                    st.error("❌ Could not extract text. The PDF might be scanned or empty.")
+                    st.error("❌ Could not extract text. The file might be empty or unreadable.")
                     
     elif st.session_state.processed_file_name is not None:
          # File was removed
@@ -335,7 +366,7 @@ if st.button("Generate Answer", use_container_width=True, type="primary"):
             relevant_chunks = []
             
             if uploaded_file is not None and not st.session_state.pdf_uploaded:
-                st.warning("⚠️ You uploaded a file but didn't click 'Process PDF'. Searching web only.")
+                st.warning("⚠️ You uploaded a file but didn't click 'Process Document'. Searching web only.")
             
             if st.session_state.pdf_uploaded and st.session_state.faiss_index is not None:
                 relevant_chunks = search_faiss_index(user_query, st.session_state.faiss_index, st.session_state.chunks)
